@@ -33,9 +33,9 @@ namespace DurableFunctionHelpers // TODO - generate this dynamically
     public static class ActivityFunctionHelpers
 	{
 <#foreach (var function in Functions) { #>
-		public static Task<string> <#=function.FunctionMethodName #>(this DurableOrchestrationContext context) // TODO parameters and return type
+		public static Task<<#=function.ReturnType #>> <#=function.FunctionMethodName #>(this DurableOrchestrationContext context) // TODO parameters
         {
-            return context.CallActivityAsync<string>("<#=function.FunctionName #>");
+            return context.CallActivityAsync<<#=function.ReturnType #>>("<#=function.FunctionName #>");
         }
 <#} #>
 	}
@@ -118,7 +118,7 @@ void ProcessFunctions(Project project)
 						var function = new ActivityFunctionInfo();
 						function.FunctionMethodName = method.Name;
 						function.FunctionName = GetFunctionName(method);
-
+						function.ReturnType = method.Type.AsFullName;
 						Functions.Add(function);
 					}
 				}
