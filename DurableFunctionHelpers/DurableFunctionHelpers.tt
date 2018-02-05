@@ -1,0 +1,143 @@
+﻿<#
+/*
+Spike to test the idea of generating type-safe helpers for calling Activity Functions with Azure Durable Functions
+
+Lots of inspiration has been drawn from T4MVC: https://github.com/T4MVC/T4MVC/
+
+*/
+#>
+<#@ template debug="false" hostspecific="true" language="C#" #>
+<#@ assembly name="System.Core" #>
+<#@ assembly name="Microsoft.VisualStudio.Shell.Interop" #>
+<#@ assembly name="EnvDTE" #>
+<#@ assembly name="EnvDTE80" #>
+<#@ assembly name="VSLangProj" #>
+<#@ assembly name="System.Xml" #>
+<#@ assembly name="System.Xml.Linq" #>
+<#@ import namespace="System.Linq" #>
+<#@ import namespace="System.Text" #>
+<#@ import namespace="System.Collections.Generic" #>
+<#@ import namespace="System.IO" #>
+<#@ import namespace="System.Text.RegularExpressions" #>
+<#@ import namespace="Microsoft.VisualStudio.Shell.Interop" #>
+<#@ import namespace="EnvDTE" #>
+<#@ import namespace="EnvDTE80" #>
+<#@ import namespace="Microsoft.VisualStudio.TextTemplating" #>
+<#@ output extension=".cs" #>
+<#PrepareDataToRender(this); #>
+using Microsoft.Azure.WebJobs;
+using System.Threading.Tasks;
+
+<#foreach (string name in Functions) { #>
+   // <#=name #>
+<#} #>
+<#+
+static DTE Dte;
+static Project Project;
+static string AppRoot;
+static TextTransformation TT;
+static string T4FileName;
+static string T4Folder;
+static List<string> Filenames;
+static List<string> Functions;
+
+void PrepareDataToRender(TextTransformation tt)
+{
+    TT = tt;
+    T4FileName = Path.GetFileName(Host.TemplateFile);
+    T4Folder = Path.GetDirectoryName(Host.TemplateFile);
+	Filenames = new List<string>();
+	Functions = new List<string>();
+
+    // Get the DTE service from the host
+    var serviceProvider = Host as IServiceProvider;
+    if (serviceProvider != null)
+    {
+        Dte = (EnvDTE.DTE)serviceProvider.GetService(typeof(EnvDTE.DTE));
+    }
+
+    // Fail if we couldn't get the DTE. This can happen when trying to run in TextTransform.exe
+    if (Dte == null)
+    {
+        throw new Exception("T4MVC can only execute through the Visual Studio host");
+    }
+
+    Project = GetProjectContainingT4File(Dte);
+
+    if (Project == null)
+    {
+        Error("Could not find the VS Project containing the T4 file.");
+        return;
+    }
+
+    // Get the path of the root folder of the app
+    AppRoot = Path.GetDirectoryName(Project.FullName) + '\\';
+
+    // Process controllers and views from project root
+    ProcessFunctions(Project);
+
+
+}
+
+Project GetProjectContainingT4File(DTE dte)
+{
+
+    // Find the .tt file's ProjectItem
+    ProjectItem projectItem = dte.Solution.FindProjectItem(Host.TemplateFile);
+
+    // If the .tt file is not opened, open it
+    if (projectItem.Document == null)
+        projectItem.Open(EnvDTE.Constants.vsViewKindCode);
+
+    return projectItem.ContainingProject;
+}
+
+void ProcessFunctions(Project project)
+{
+	foreach(ProjectItem item in project.ProjectItems)
+	{
+		Filenames.Add(item.FileNames[0]); // testing!!
+
+		if (item.FileCodeModel != null)
+		{
+			foreach (var ns in item.FileCodeModel.CodeElements.OfType<CodeNamespace>())
+			{
+				foreach (var type in ns.Members.OfType<CodeClass2>())
+				{
+					foreach(var method in GetMethods(type))
+					{
+						Functions.Add(method.Name);
+					}
+				}
+			}
+		}
+	}
+}
+
+static IEnumerable<CodeFunction2> GetMethods(CodeClass2 codeClass)
+{
+    // Only look at regular method (e.g. ignore things like contructors)
+    return codeClass.Members.OfType<CodeFunction2>()
+        .Where(f => TestFunctionKind(f, vsCMFunction.vsCMFunctionFunction));
+}
+
+class ActivityFunctionInfo
+{
+	public string FunctionMethodName { get;set;}
+}
+
+
+static bool TestFunctionKind(CodeFunction2 f, vsCMFunction kind)
+{
+    try
+    {
+        return f.FunctionKind == kind;
+    }
+    catch
+    {
+        // FunctionKind blows up in some cases. Just ignore.
+        return false;
+    }
+}
+
+#>
