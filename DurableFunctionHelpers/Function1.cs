@@ -37,7 +37,7 @@ namespace DurableFunctionHelpers
         }
 
 
-        [FunctionName("Function1_Hello")]
+        [FunctionName("Function2_Hello")]
         public static string SayHello2([ActivityTrigger] string name, int age, TraceWriter log)
         {
             log.Info($"Saying hello to {name}. Age {age}");

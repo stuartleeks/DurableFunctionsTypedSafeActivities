@@ -28,9 +28,18 @@ Lots of inspiration has been drawn from T4MVC: https://github.com/T4MVC/T4MVC/
 using Microsoft.Azure.WebJobs;
 using System.Threading.Tasks;
 
-<#foreach (string name in Functions) { #>
-   // <#=name #>
+namespace DurableFunctionHelpers // TODO - generate this dynamically
+{
+    public static class ActivityFunctionHelpers
+	{
+<#foreach (var function in Functions) { #>
+		public static Task<string> <#=function.FunctionMethodName #>(this DurableOrchestrationContext context) // TODO parameters and return type
+        {
+            return context.CallActivityAsync<string>("<#=function.FunctionName #>");
+        }
 <#} #>
+	}
+}
 <#+
 static DTE Dte;
 static Project Project;
@@ -39,7 +48,7 @@ static TextTransformation TT;
 static string T4FileName;
 static string T4Folder;
 static List<string> Filenames;
-static List<string> Functions;
+static List<ActivityFunctionInfo> Functions;
 
 void PrepareDataToRender(TextTransformation tt)
 {
@@ -47,7 +56,7 @@ void PrepareDataToRender(TextTransformation tt)
     T4FileName = Path.GetFileName(Host.TemplateFile);
     T4Folder = Path.GetDirectoryName(Host.TemplateFile);
 	Filenames = new List<string>();
-	Functions = new List<string>();
+	Functions = new List<ActivityFunctionInfo>();
 
     // Get the DTE service from the host
     var serviceProvider = Host as IServiceProvider;
@@ -106,7 +115,11 @@ void ProcessFunctions(Project project)
 				{
 					foreach(var method in GetMethods(type))
 					{
-						Functions.Add(method.Name);
+						var function = new ActivityFunctionInfo();
+						function.FunctionMethodName = method.Name;
+						function.FunctionName = GetFunctionName(method);
+
+						Functions.Add(function);
 					}
 				}
 			}
@@ -118,15 +131,38 @@ static IEnumerable<CodeFunction2> GetMethods(CodeClass2 codeClass)
 {
     // Only look at regular method (e.g. ignore things like contructors)
     return codeClass.Members.OfType<CodeFunction2>()
-        .Where(f => TestFunctionKind(f, vsCMFunction.vsCMFunctionFunction));
+        .Where(f => TestFunctionKind(f, vsCMFunction.vsCMFunctionFunction))
+		.Where(IsActivityFunction);
 }
 
 class ActivityFunctionInfo
 {
-	public string FunctionMethodName { get;set;}
+	public string FunctionMethodName { get; set; }
+	public string FunctionName { get; set; }
+	public string ReturnType { get; set; }
+	public List<ParameterInfo> Parameters { get; set; } 
+}
+class ParameterInfo
+{
+	public string Name { get; set; }
+	public string Type { get; set; }
 }
 
 
+static bool IsActivityFunction(CodeFunction2 f)
+{
+	foreach(CodeParameter parameter in f.Parameters)
+	{
+		foreach(CodeAttribute attribute in parameter.Attributes)
+		{
+			if (attribute.Name == "ActivityTrigger") // could do better than name matching!
+			{
+				return true;
+			}
+		}
+	}
+	return false;
+}
 static bool TestFunctionKind(CodeFunction2 f, vsCMFunction kind)
 {
     try
@@ -138,6 +174,17 @@ static bool TestFunctionKind(CodeFunction2 f, vsCMFunction kind)
         // FunctionKind blows up in some cases. Just ignore.
         return false;
     }
+}
+static string GetFunctionName(CodeFunction f)
+{
+	foreach(CodeAttribute2 attribute in f.Attributes)
+	{
+		if (attribute.Name == "FunctionName")
+		{
+			return attribute.Value.Trim('"'); // TODO - look at better ways to get attribute data
+		}
+	}
+	return null;
 }
 
 #>

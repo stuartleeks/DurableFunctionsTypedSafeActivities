@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace DurableFunctionHelpers
 {
-    public static class ActivityFunctionHelpers
+    public static class ActivityFunctionHelpers_ManuallyCreated
     {
         // Idea is that this file would be auto-generated
         // Look for functions with ActivityTrigger attribute
