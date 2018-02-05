@@ -33,7 +33,7 @@ namespace DurableFunctionHelpers // TODO - generate this dynamically
     public static class ActivityFunctionHelpers
 	{
 <#foreach (var function in Functions) { #>
-		public static Task<<#=function.ReturnType #>> <#=function.FunctionMethodName #>(this DurableOrchestrationContext context) // TODO parameters
+		public static Task<<#=function.ReturnType #>> <#=function.FunctionMethodName #>(this DurableOrchestrationContext context <#foreach (var parameter in function.Parameters) { #>, <#=parameter.Type #> <#=parameter.Name #><# } #>) 
         {
             return context.CallActivityAsync<<#=function.ReturnType #>>("<#=function.FunctionName #>");
         }
@@ -119,20 +119,24 @@ void ProcessFunctions(Project project)
 						function.FunctionMethodName = method.Name;
 						function.FunctionName = GetFunctionName(method);
 						function.ReturnType = method.Type.AsFullName;
+						function.Parameters = new List<ParameterInfo>();
+
+						foreach(CodeParameter parameter in GetParameters(method))
+						{
+							var parameterInfo = new ParameterInfo
+							{
+								Name = parameter.Name,
+								Type = parameter.Type.AsFullName.Trim('"')
+							};
+							function.Parameters.Add(parameterInfo);
+						}
+
 						Functions.Add(function);
 					}
 				}
 			}
 		}
 	}
-}
-
-static IEnumerable<CodeFunction2> GetMethods(CodeClass2 codeClass)
-{
-    // Only look at regular method (e.g. ignore things like contructors)
-    return codeClass.Members.OfType<CodeFunction2>()
-        .Where(f => TestFunctionKind(f, vsCMFunction.vsCMFunctionFunction))
-		.Where(IsActivityFunction);
 }
 
 class ActivityFunctionInfo
@@ -146,6 +150,25 @@ class ParameterInfo
 {
 	public string Name { get; set; }
 	public string Type { get; set; }
+}
+static IEnumerable<CodeParameter> GetParameters(CodeFunction2 f)
+{
+	foreach(CodeParameter parameter in f.Parameters)
+	{
+		// TODO - add better logic to decide what parameters to filter out!
+		if (parameter.Type.AsFullName != "Microsoft.Azure.WebJobs.Host.TraceWriter")
+		{
+			yield return parameter;
+		}
+	}
+}
+
+static IEnumerable<CodeFunction2> GetMethods(CodeClass2 codeClass)
+{
+    // Only look at regular method (e.g. ignore things like contructors)
+    return codeClass.Members.OfType<CodeFunction2>()
+        .Where(f => TestFunctionKind(f, vsCMFunction.vsCMFunctionFunction))
+		.Where(IsActivityFunction);
 }
 
 
